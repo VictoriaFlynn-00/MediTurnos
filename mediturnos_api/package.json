@@ -1,0 +1,22 @@
+{
+  "name": "mediturnos-api",
+  "version": "0.1.0",
+  "private": true,
+  "description": "API REST de MediTurnos (Express + MySQL) para Azure App Service",
+  "main": "src/server.js",
+  "engines": { "node": ">=20.6" },
+  "scripts": {
+  "start": "node src/server.js",
+  "dev": "node --watch --env-file=.env src/server.js",
+  "test": "node --test",
+  "probar": "node scripts/probar-api.js"
+},
+  "dependencies": {
+    "bcryptjs": "^2.4.3",
+    "express": "^5.1.0",
+    "express-rate-limit": "^7.5.0",
+    "helmet": "^8.0.0",
+    "jsonwebtoken": "^9.0.2",
+    "mysql2": "^3.11.0"
+  }
+}

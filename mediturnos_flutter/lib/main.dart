@@ -1,5 +1,9 @@
-import 'package:mediturnos/main.dart' as app;
+import 'package:flutter/material.dart';
+import 'app.dart';
+import 'core/di.dart';
 
 Future<void> main() async {
-  await app.main();
+  WidgetsFlutterBinding.ensureInitialized();
+  final di = await Di.crear();
+  runApp(MediTurnosApp(di: di));
 }

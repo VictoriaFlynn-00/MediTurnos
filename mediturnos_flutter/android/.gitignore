@@ -1,5 +1,14 @@
 gradle-wrapper.jar
 /.gradle
+/.kotlin/
+/build/
+/gradle/.tmp/
+/gradle/android/
+/gradle/caches/
+/gradle/daemon/
+/gradle/kotlin-profile/
+/gradle/native/
+/gradle/wrapper/dists/
 /captures/
 /gradlew
 /gradlew.bat
