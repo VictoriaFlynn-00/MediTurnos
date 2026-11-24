@@ -34,13 +34,13 @@ function usuarioDeReserva(user) {
   return user.id;
 }
 
-function vinculoInvitado(req) {
+function vinculoDeOrigen(req) {
   const vinculo = req.body?.avisoVinculo;
-  return !req.user && typeof vinculo === 'string' && /^[a-f0-9]{32}$/.test(vinculo) ? vinculo : null;
+  return typeof vinculo === 'string' && /^[a-f0-9]{32}$/.test(vinculo) ? vinculo : null;
 }
 
 async function avisarConflicto(e, { dni, avisoVinculo, operacionId }) {
-  if (e.code === 'HORARIO_NO_DISPONIBLE' && (dni || avisoVinculo) && operacionId) {
+  if (e.code === 'HORARIO_NO_DISPONIBLE' && avisoVinculo && operacionId) {
     await encolarConflicto({ dni, avisoVinculo, operacionId }).catch(registrarFalloAviso);
   }
 }
@@ -124,7 +124,7 @@ r.post('/reservas', autenticarOpcional, async (req, res) => {
     });
     res.status(repetida ? 200 : 201).json({ venceEn });
   } catch (e) {
-    await avisarConflicto(e, { dni: req.user?.dni, avisoVinculo: vinculoInvitado(req), operacionId: token });
+    await avisarConflicto(e, { dni: req.user?.dni, avisoVinculo: vinculoDeOrigen(req), operacionId: token });
     throw e;
   }
 });
@@ -154,7 +154,7 @@ r.post('/', autenticarOpcional, async (req, res) => {
   const tokenHash = req.body?.reservaToken == null ? null : hashDe(req.body.reservaToken);
   const reservaTentativa = req.body?.reservaTentativa === true;
   const operacionId = req.body?.operacionId == null ? null : identificador(req.body.operacionId, 'Operación');
-  const avisoVinculo = vinculoInvitado(req);
+  const avisoVinculo = vinculoDeOrigen(req);
 
   try {
     const { id, repetido } = await tx(async (c) => {

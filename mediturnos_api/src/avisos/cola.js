@@ -24,20 +24,10 @@ async function insertarEvento(c, clave, tipo, turno = null) {
 }
 
 async function encolarPush(c, evento, dni, avisoVinculo) {
-  if (avisoVinculo) {
-    await c.execute(
-      "INSERT INTO aviso_entregas (evento, canal, vinculo) VALUES (?, 'push', ?)",
-      [evento, avisoVinculo]
-    );
-    return;
-  }
-  if (!dni) return;
+  if (!avisoVinculo) return;
   await c.execute(
-    `INSERT INTO aviso_entregas (evento, canal, dispositivo, vinculo)
-       SELECT ?, 'push', id_dispositivo, vinculo
-         FROM aviso_dispositivos
-        WHERE paciente = ? AND actualizado_en > DATE_SUB(NOW(), INTERVAL 30 DAY)`,
-    [evento, dni]
+    "INSERT INTO aviso_entregas (evento, canal, vinculo, paciente_destino) VALUES (?, 'push', ?, ?)",
+    [evento, avisoVinculo, dni ?? null]
   );
 }
 
@@ -57,23 +47,23 @@ async function encolarConfirmacion(c, { turnoId, dni, avisoVinculo, autenticado 
       [clave, dni]
     );
   }
-  if (push) await encolarPush(c, clave, autenticado ? dni : null, autenticado ? null : avisoVinculo);
+  if (push) await encolarPush(c, clave, autenticado ? dni : null, avisoVinculo);
 }
 
 /** Se llama después de revertir el turno que falló en la sincronización. */
 async function encolarConflicto({ dni, avisoVinculo, operacionId }) {
-  if (!pushConfigurado() || (!dni && !avisoVinculo)) return;
+  if (!pushConfigurado() || !avisoVinculo) return;
   const origen = dni ? `paciente:${dni}` : `invitado:${avisoVinculo}`;
   const clave = huella(`conflicto:${origen}:${operacionId}`);
   await tx(async (c) => {
-    if (await insertarEvento(c, clave, 'conflicto')) await encolarPush(c, clave, dni, dni ? null : avisoVinculo);
+    if (await insertarEvento(c, clave, 'conflicto')) await encolarPush(c, clave, dni, avisoVinculo);
   });
 }
 
 async function tomarEntrega(canal) {
   return tx(async (c) => {
     const [rows] = await c.execute(
-      `SELECT id_entrega AS id, evento, canal, email, dispositivo, vinculo, estado, intentos
+      `SELECT id_entrega AS id, evento, canal, email, dispositivo, vinculo, paciente_destino, estado, intentos
          FROM aviso_entregas
         WHERE canal = ? AND estado IN ('pendiente', 'en_curso') AND proximo_intento <= NOW()
         ORDER BY proximo_intento, id_entrega LIMIT 1 FOR UPDATE SKIP LOCKED`,
@@ -150,19 +140,22 @@ async function entregarPush(entrega) {
        FROM aviso_eventos a
        LEFT JOIN aviso_dispositivos d
          ON d.vinculo = ?
-         AND ((? IS NULL AND d.paciente IS NULL) OR d.id_dispositivo = ?)
+         AND ((? IS NULL AND d.paciente <=> ?) OR d.id_dispositivo = ?)
          AND d.actualizado_en > DATE_SUB(NOW(), INTERVAL 30 DAY)
        LEFT JOIN turnos t ON t.id_turno = a.turno
       WHERE a.clave = ?
         AND a.creado_en > DATE_SUB(NOW(), INTERVAL 1 HOUR)
-        AND (a.tipo = 'conflicto' OR (t.estado = 'activo' AND (? IS NULL OR t.paciente = d.paciente)))`,
-    [entrega.vinculo, entrega.dispositivo, entrega.dispositivo, entrega.evento, entrega.dispositivo]
+        AND (a.tipo = 'conflicto' OR (t.estado = 'activo'
+             AND (? IS NULL OR t.paciente = ?)
+             AND (? IS NULL OR t.paciente = d.paciente)))`,
+    [entrega.vinculo, entrega.dispositivo, entrega.paciente_destino, entrega.dispositivo,
+      entrega.evento, entrega.paciente_destino, entrega.paciente_destino, entrega.dispositivo]
   );
   const destino = rows[0];
   if (!destino) return 'omitido';
   if (!destino.token) {
     if (entrega.dispositivo) return 'omitido';
-    // Después de trabajar sin red, el invitado puede sincronizar antes de registrar su token.
+    // La sincronización puede crear el aviso antes de que la instalación registre su token.
     throw Object.assign(new Error('El dispositivo todavía no está registrado'), { code: 'FCM_DISPOSITIVO_PENDIENTE' });
   }
   try {

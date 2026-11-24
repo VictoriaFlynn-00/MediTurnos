@@ -9,7 +9,7 @@ App Flutter ──HTTPS + JWT──▶ esta API ──▶ MySQL
 
 ## Actualizar una instalación de MediTurnos
 
-En una base que ya tiene el esquema de MediTurnos, aplicá una vez y en orden los scripts 03_turnos.sql, 04_cuentas.sql y 05_avisos.sql de la carpeta sql. Después desplegá esta API y actualizá Flutter. El volcado inicial elimina tablas y se usa únicamente al instalar desde cero.
+En una base que ya tiene el esquema de MediTurnos, aplicá una vez las migraciones pendientes de la carpeta sql, en orden: 03_turnos.sql, 04_cuentas.sql, 05_avisos.sql y 06_push_origen.sql. Después desplegá esta API y actualizá Flutter en los dispositivos. El volcado inicial elimina tablas y se usa únicamente al instalar desde cero.
 
 La app consulta los horarios con detalle=1, aparta una franja por siete minutos en MySQL y confirma usando el token de esa reserva. La confirmación genera los avisos de correo y push configurados. La recuperación de contraseña usa un código de un solo uso que vence en 20 minutos. Las credenciales de SendGrid y Firebase y los pasos para cada plataforma figuran en [la guía de avisos](../mediturnos_flutter/docs/AVISOS.md).
 
@@ -56,6 +56,7 @@ Necesitás Node 20.6+ y MySQL 8.0.19+.
    mysql -u root -p < mediturnos_api/sql/03_turnos.sql
    mysql -u root -p < mediturnos_api/sql/04_cuentas.sql
    mysql -u root -p < mediturnos_api/sql/05_avisos.sql
+   mysql -u root -p < mediturnos_api/sql/06_push_origen.sql
    ```
 2. Configurá y arrancá:
    ```bash

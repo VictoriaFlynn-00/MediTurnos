@@ -223,3 +223,19 @@ test('una solicitud tentativa se valida online, aunque nunca se haya creado la r
   assert.equal((await confirmar(a)).codigo, 409);
   assert.equal((await confirmar({ ...a, reservaTentativa: true })).codigo, 201);
 });
+
+test('la misma cuenta conserva el vínculo de la instalación que confirma o encuentra un conflicto', async () => {
+  const telefono = '1'.repeat(32);
+  const tablet = '2'.repeat(32);
+  const body = candidato('2030-02-04', 'f'.repeat(64), { avisoVinculo: tablet });
+  const headers = { authorization: carnet(body.paciente.dni) };
+  assert.equal((await llamar('POST /reservas', { headers, body })).codigo, 201);
+  const competidor = { ...body, reservaToken: '9'.repeat(64), avisoVinculo: telefono };
+  assert.equal((await llamar('POST /reservas', { headers, body: competidor })).codigo, 409);
+  assert.equal(avisos.conflictos.at(-1).avisoVinculo, telefono);
+  assert.equal((await llamar('POST /', { headers, body })).codigo, 201);
+  const confirmado = avisos.confirmaciones.at(-1);
+  assert.equal(confirmado.autenticado, true);
+  assert.equal(confirmado.avisoVinculo, tablet);
+  assert.equal(confirmado.dni, body.paciente.dni);
+});
