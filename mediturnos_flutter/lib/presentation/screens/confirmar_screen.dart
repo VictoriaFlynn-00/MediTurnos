@@ -161,7 +161,11 @@ class _FormState extends State<_Form> with WidgetsBindingObserver {
                 color: AppColors.danger,
               )
             else if (segundos != null)
-              Aviso(titulo: 'Horario reservado por ${segundos ~/ 60}:${(segundos % 60).toString().padLeft(2, '0')}')
+              Aviso(
+                titulo: 'Horario reservado por ${segundos ~/ 60}:${(segundos % 60).toString().padLeft(2, '0')}',
+                fondo: AppColors.successLight,
+                color: AppColors.successDark,
+              )
             else
               const Aviso(titulo: 'Horario tentativo', detalle: 'La clínica verificará la disponibilidad al recibir tu solicitud.'),
             _registrado

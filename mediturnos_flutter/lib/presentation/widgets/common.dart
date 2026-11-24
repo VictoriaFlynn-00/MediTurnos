@@ -388,6 +388,8 @@ class BannerOffline extends StatelessWidget {
     return const Aviso(
       titulo: 'Sin conexión · modo offline',
       detalle: 'Ves datos guardados en tu dispositivo. Lo que hagas se sincronizará al recuperar la señal.',
+      fondo: AppColors.border,
+      color: AppColors.textMain,
     );
   }
 }

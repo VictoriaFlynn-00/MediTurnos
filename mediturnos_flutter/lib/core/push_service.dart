@@ -115,14 +115,15 @@ class PushService {
     reintentar();
   }
 
-  /// El turno invitado guarda su vínculo original también al quedar en cola local.
-  Future<String?> vinculoInvitado() async {
-    if (_cuenta != _invitado) return null;
+  /// Conserva la instalación de origen también cuando la solicitud queda en cola.
+  Future<String?> vinculoDeOrigen() async {
+    final cuenta = _cuenta;
+    if (cuenta == null) return null;
     await _preparado;
     try {
       final messaging = await _firebase;
       final permiso = await messaging?.getNotificationSettings();
-      return _cuenta == _invitado && _permiteAvisos(permiso)
+      return _cuenta == cuenta && _registro?.cuenta == cuenta && _permiteAvisos(permiso)
           ? _registro?.vinculo
           : null;
     } catch (_) {

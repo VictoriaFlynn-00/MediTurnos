@@ -59,7 +59,7 @@ class Di {
     di.sync = SyncManager(di.db, di.remote, di.connectivity);
     di.authRepo = AuthRepositoryImpl(di.remote, di.db, tokens);
     di.turnoRepo = TurnoRepositoryImpl(
-      di.db, di.remote, di.connectivity, di.sync, vinculoInvitado: di.push.vinculoInvitado,
+      di.db, di.remote, di.connectivity, di.sync, vinculoDeOrigen: di.push.vinculoDeOrigen,
     );
 
     di.iniciarSesion = IniciarSesionUseCase(di.authRepo);

@@ -18,13 +18,13 @@ import 'sync_manager.dart';
 /// (según haya o no conexión) y que delega en el SyncManager la cola.
 class TurnoRepositoryImpl implements TurnoRepository {
   TurnoRepositoryImpl(this._local, this._remote, this._conn, this._sync,
-      {Future<String?> Function()? vinculoInvitado})
-      : _vinculoInvitado = vinculoInvitado;
+      {Future<String?> Function()? vinculoDeOrigen})
+      : _vinculoDeOrigen = vinculoDeOrigen;
   final LocalDb _local;
   final RemoteDataSource _remote;
   final ConnectivityService _conn;
   final SyncManager _sync;
-  final Future<String?> Function()? _vinculoInvitado;
+  final Future<String?> Function()? _vinculoDeOrigen;
 
   static const _kBorrador = 'draft:confirmar';
   static final _azar = Random.secure();
@@ -123,7 +123,7 @@ class TurnoRepositoryImpl implements TurnoRepository {
     if (!_conn.online) return null;
     final token = _nuevoId();
     try {
-      final vinculo = await _vinculoInvitado?.call();
+      final vinculo = await _vinculoDeOrigen?.call();
       final venceEn = await _remote.reservarHorario(
           espId, Fechas.iso(fecha), hora, token, avisoVinculo: vinculo);
       return ReservaTemporal(token, venceEn);
@@ -165,7 +165,7 @@ class TurnoRepositoryImpl implements TurnoRepository {
     ReservaTemporal? reserva,
   }) async {
     final operacionId = _nuevoId();
-    final avisoVinculo = await _vinculoInvitado?.call();
+    final avisoVinculo = await _vinculoDeOrigen?.call();
     final base = Turno(
       id: 'L$operacionId',
       pacienteDni: datos.dni,
