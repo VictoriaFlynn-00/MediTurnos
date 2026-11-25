@@ -3,6 +3,7 @@ const { createHash, randomBytes } = require('node:crypto');
 const bcrypt = require('bcryptjs');
 const { pool, tx } = require('./db');
 const { E } = require('./errors');
+const V = require('./validar');
 const { sendMail } = require('./avisos/correo');
 
 const MINUTOS_VALIDEZ = 20;
@@ -14,8 +15,8 @@ async function solicitarRecuperacion(usuarioODni) {
   const [[cuenta]] = await pool.query(
     `SELECT u.id_usuario
        FROM usuarios u JOIN pacientes p ON p.usuarioID = u.id_usuario
-      WHERE u.rol = 'paciente' AND ${porDni ? 'p.id_paciente' : 'u.usuario'} = ?`,
-    [porDni ? Number(usuarioODni) : usuarioODni]
+      WHERE u.rol = 'paciente' AND ${porDni ? 'p.dni' : 'u.usuario'} = ?`,
+    [porDni ? V.dni(usuarioODni) : usuarioODni]
   );
   if (!cuenta) return;
 

@@ -20,13 +20,13 @@ class _Cuenta {
 
 class _RTurno {
   final int id;
-  final String dni;
+  final int pacienteId;
   final int espId;
   final String fecha;
   final String hora;
   final String? reservaToken;
   String estado;
-  _RTurno(this.id, this.dni, this.espId, this.fecha, this.hora, this.estado, {this.reservaToken});
+  _RTurno(this.id, this.pacienteId, this.espId, this.fecha, this.hora, this.estado, {this.reservaToken});
 }
 
 /// Servidor simulado en memoria. Respeta la conectividad de la app
@@ -72,10 +72,11 @@ class MockRemoteDataSource implements RemoteDataSource {
   final _turnos = <_RTurno>[];
   final _reservas = <(int, String, String), ReservaTemporal>{};
   int _seq = 100;
+  int _siguientePaciente = 3;
 
   void _sembrar() {
     _pacientes['34123456'] = const Paciente(
-      dni: '34123456', nombre: 'Camila', apellido: 'Fernández',
+      id: 1, dni: '34123456', nombre: 'Camila', apellido: 'Fernández',
       fechaNacimiento: '1995-08-14', email: 'camila.f@ejemplo.com',
       telefono: '385 555 1234',
       domicilio: 'Av. Belgrano Sur 1234, Santiago del Estero',
@@ -83,7 +84,7 @@ class MockRemoteDataSource implements RemoteDataSource {
     );
     _cuentas.add(_Cuenta(1, 'camilaf_99', _hash('12345678'), '34123456'));
     _pacientes['40111222'] = const Paciente(
-      dni: '40111222', nombre: 'Lucía', apellido: 'Gómez',
+      id: 2, dni: '40111222', nombre: 'Lucía', apellido: 'Gómez',
       fechaNacimiento: '2001-03-02', email: 'lucia.g@ejemplo.com',
       telefono: '385 444 9876', domicilio: 'Independencia 450',
     );
@@ -93,8 +94,8 @@ class MockRemoteDataSource implements RemoteDataSource {
     while (!_dias[3]!.contains(prox.weekday)) {
       prox = prox.add(const Duration(days: 1));
     }
-    _turnos.add(_RTurno(1, '34123456', 3, Fechas.iso(prox), '16:00', 'activo'));
-    _turnos.add(_RTurno(2, '34123456', 2,
+    _turnos.add(_RTurno(1, 1, 3, Fechas.iso(prox), '16:00', 'activo'));
+    _turnos.add(_RTurno(2, 1, 2,
         Fechas.iso(hoy.subtract(const Duration(days: 40))), '10:15', 'activo'));
   }
 
@@ -173,7 +174,7 @@ class MockRemoteDataSource implements RemoteDataSource {
     _exigirUsuarioDisponible(usuario);
     final id = ++_seq;
     _cuentas.add(_Cuenta(id, usuario, _hash(password), datos.dni));
-    final p = datos.copyWith(usuarioId: id);
+    final p = datos.copyWith(id: existente?.id ?? _siguientePaciente++, usuarioId: id);
     _pacientes[datos.dni] = p;
     final u = Usuario(id: id, usuario: usuario, rol: Rol.paciente);
     return Session(token: _jwt(u), usuario: u, paciente: p);
@@ -183,7 +184,7 @@ class MockRemoteDataSource implements RemoteDataSource {
   Future<Paciente> actualizarPaciente(Paciente p) async {
     await _red();
     final actual = _pacientes[p.dni];
-    final nuevo = p.copyWith(usuarioId: actual?.usuarioId ?? p.usuarioId);
+    final nuevo = p.copyWith(id: actual?.id ?? _siguientePaciente++, usuarioId: actual?.usuarioId ?? p.usuarioId);
     _pacientes[p.dni] = nuevo;
     return nuevo;
   }
@@ -279,7 +280,7 @@ class MockRemoteDataSource implements RemoteDataSource {
     await _red();
     final activo = _turnoActivo(especialistaId, fecha, hora);
     if (activo != null) {
-      if (activo.dni == paciente.dni && (reservaToken == null || activo.reservaToken == reservaToken)) {
+      if (activo.pacienteId == _pacientes[paciente.dni]?.id && (reservaToken == null || activo.reservaToken == reservaToken)) {
         return activo.id;
       }
       throw const HorarioNoDisponibleException();
@@ -295,17 +296,18 @@ class MockRemoteDataSource implements RemoteDataSource {
 
     // Alta/actualización de la ficha del paciente (también para invitados).
     final previo = _pacientes[paciente.dni];
-    _pacientes[paciente.dni] = paciente.copyWith(usuarioId: previo?.usuarioId);
+    final pacienteId = previo?.id ?? _siguientePaciente++;
+    _pacientes[paciente.dni] = paciente.copyWith(id: pacienteId, usuarioId: previo?.usuarioId);
 
     final id = ++_seq;
-    _turnos.add(_RTurno(id, paciente.dni, especialistaId, fecha, hora, 'activo', reservaToken: reservaToken));
+    _turnos.add(_RTurno(id, pacienteId, especialistaId, fecha, hora, 'activo', reservaToken: reservaToken));
     if (propia) _reservas.remove(clave);
     return id;
   }
 
   /// Solo para pruebas: simula que OTRO paciente reservó ese horario.
   void simularReservaAjena(int espId, String fecha, String hora) {
-    _turnos.add(_RTurno(++_seq, '99999999', espId, fecha, hora, 'activo'));
+    _turnos.add(_RTurno(++_seq, _siguientePaciente++, espId, fecha, hora, 'activo'));
   }
 
   @override
@@ -319,7 +321,7 @@ class MockRemoteDataSource implements RemoteDataSource {
   @override
   Future<List<Turno>> turnosPaciente(String dni) async {
     await _red();
-    return _turnos.where((t) => t.dni == dni).map((t) {
+    return _turnos.where((t) => t.pacienteId == _pacientes[dni]?.id).map((t) {
       final d = _doc(t.espId);
       return Turno(
         id: 'r${t.id}',

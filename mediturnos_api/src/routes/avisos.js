@@ -8,7 +8,7 @@ const { pushConfigurado } = require('../avisos/push');
 const r = Router();
 
 function dispositivo(req) {
-  if (req.user && (req.user.rol !== 'paciente' || !req.user.dni)) throw E.prohibido();
+  if (req.user && (req.user.rol !== 'paciente' || !req.user.pacienteId)) throw E.prohibido();
   const { token, vinculo } = req.body ?? {};
   if (typeof token !== 'string' || !/^[\x21-\x7e]{30,512}$/.test(token)) {
     throw E.validacion('Token de notificaciones inválido');
@@ -24,7 +24,7 @@ r.put('/dispositivos', autenticarOpcional, async (req, res) => {
   if (!pushConfigurado()) {
     throw new ApiError(503, 'PUSH_NO_CONFIGURADO', 'Notificaciones push no configuradas');
   }
-  const paciente = req.user ? String(req.user.dni) : null;
+  const paciente = req.user?.pacienteId ?? null;
   try {
     await tx(async (c) => {
       const [rows] = await c.execute(
@@ -39,7 +39,7 @@ r.put('/dispositivos', autenticarOpcional, async (req, res) => {
         return;
       }
       const titular = rows[0].paciente;
-      if (titular !== null ? String(titular) !== paciente : paciente !== null) throw E.prohibido();
+      if (titular !== paciente) throw E.prohibido();
       await c.execute(
         'UPDATE aviso_dispositivos SET token = ?, actualizado_en = NOW() WHERE vinculo = ?',
         [token, vinculo]
@@ -57,7 +57,7 @@ r.delete('/dispositivos', autenticarOpcional, async (req, res) => {
   if (pushConfigurado()) {
     await pool.execute(
       'DELETE FROM aviso_dispositivos WHERE token = ? AND paciente <=> ? AND vinculo = ?',
-      [token, req.user?.dni ?? null, vinculo]
+      [token, req.user?.pacienteId ?? null, vinculo]
     );
   }
   res.sendStatus(204);

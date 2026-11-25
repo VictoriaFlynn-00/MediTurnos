@@ -18,7 +18,7 @@ const HASH_FALSO = bcrypt.hashSync('no-existe-este-usuario', 10);
 
 function sesion(u, p) {
   return {
-    token: firmar({ id: u.id_usuario, rol: u.rol, version: u.version }, p ? String(p.id_paciente) : null),
+    token: firmar({ id: u.id_usuario, rol: u.rol, version: u.version }),
     usuario: { id: u.id_usuario, usuario: u.usuario, rol: u.rol },
     paciente: p ? pacienteAJson(p) : null,
   };
@@ -30,13 +30,13 @@ r.post('/login', async (req, res) => {
   const pass = String(req.body?.password ?? '');
   if (!q || !pass || pass.length > 200) throw E.credenciales();
 
-  const dni = /^\d{7,8}$/.test(q) ? Number(q) : null;
+  const dni = /^\d{7,8}$/.test(q) ? V.dni(q) : null;
   const [rows] = await pool.query(
     `SELECT u.id_usuario, u.usuario, u.contrasena_hash, u.rol, s.version
        FROM usuarios u
        LEFT JOIN pacientes p ON p.usuarioID = u.id_usuario
        LEFT JOIN versiones_sesion s ON s.usuario_id = u.id_usuario
-      WHERE u.usuario = ? OR p.id_paciente = ?
+      WHERE u.usuario = ? OR p.dni = ?
       LIMIT 1`,
     [q, dni]
   );
@@ -88,7 +88,7 @@ r.post('/registro', async (req, res) => {
 
   const nueva = await tx(async (c) => {
     // Bloquea la fila del DNI para que dos registros simultáneos no se pisen.
-    const [ex] = await c.query('SELECT usuarioID FROM pacientes WHERE id_paciente = ? FOR UPDATE', [
+    const [ex] = await c.query('SELECT usuarioID FROM pacientes WHERE dni = ? FOR UPDATE', [
       datos.dni,
     ]);
     if (ex[0]?.usuarioID) throw E.usuarioExistente('Ese DNI ya tiene un usuario registrado');
@@ -105,7 +105,8 @@ r.post('/registro', async (req, res) => {
       throw e;
     }
     await guardarFicha(c, datos, idUsuario);
-    const [pac] = await c.query('SELECT * FROM pacientes WHERE id_paciente = ?', [datos.dni]);
+    const [pac] = await c.query('SELECT * FROM pacientes WHERE dni = ?', [datos.dni]);
+    if (pac[0]?.usuarioID !== idUsuario) throw E.usuarioExistente('Ese DNI ya tiene un usuario registrado');
     return sesion({ id_usuario: idUsuario, usuario, rol: 'paciente' }, pac[0]);
   });
   res.status(201).json(nueva);

@@ -11,7 +11,8 @@ const USUARIO = /^[A-Za-z][A-Za-z0-9._-]{2,29}$/;
 function dni(v) {
   const s = String(v ?? '').trim();
   if (!DNI.test(s)) throw E.validacion('El DNI debe tener 7 u 8 dígitos');
-  return s;
+  // El esquema histórico guardaba enteros. Un cero de relleno no crea otra ficha.
+  return s.length === 8 && s.startsWith('0') ? s.slice(1) : s;
 }
 
 function entero(v, campo) {

@@ -1,4 +1,5 @@
 class Paciente {
+  final int? id; // Lo asigna el servidor al guardar la ficha.
   final String dni;
   final String nombre;
   final String apellido;
@@ -12,6 +13,7 @@ class Paciente {
   final int? usuarioId;
 
   const Paciente({
+    this.id,
     required this.dni,
     required this.nombre,
     this.apellido = '',
@@ -35,6 +37,7 @@ class Paciente {
   }
 
   Paciente copyWith({
+    int? id,
     String? dni,
     String? nombre,
     String? apellido,
@@ -48,6 +51,7 @@ class Paciente {
     int? usuarioId,
   }) =>
       Paciente(
+        id: id ?? this.id,
         dni: dni ?? this.dni,
         nombre: nombre ?? this.nombre,
         apellido: apellido ?? this.apellido,
@@ -62,6 +66,7 @@ class Paciente {
       );
 
   Map<String, dynamic> toJson() => {
+        if (id != null) 'id': id,
         'dni': dni,
         'nombre': nombre,
         'apellido': apellido,
@@ -76,6 +81,7 @@ class Paciente {
       };
 
   factory Paciente.fromJson(Map<String, dynamic> j) => Paciente(
+        id: j['id'] as int?,
         dni: j['dni'] as String,
         nombre: (j['nombre'] ?? '') as String,
         apellido: (j['apellido'] ?? '') as String,

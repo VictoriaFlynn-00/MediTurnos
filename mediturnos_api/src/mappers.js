@@ -3,7 +3,8 @@
 /** Fila de MySQL -> JSON que espera Paciente.fromJson (Flutter). */
 function pacienteAJson(r) {
   return {
-    dni: String(r.id_paciente),
+    id: r.id_paciente,
+    dni: r.dni,
     nombre: r.nombre,
     apellido: r.apellido ?? '',
     fechaNacimiento: r.fechaNacimiento ?? '',

@@ -23,16 +23,16 @@ async function insertarEvento(c, clave, tipo, turno = null) {
   }
 }
 
-async function encolarPush(c, evento, dni, avisoVinculo) {
+async function encolarPush(c, evento, pacienteId, avisoVinculo) {
   if (!avisoVinculo) return;
   await c.execute(
     "INSERT INTO aviso_entregas (evento, canal, vinculo, paciente_destino) VALUES (?, 'push', ?, ?)",
-    [evento, avisoVinculo, dni ?? null]
+    [evento, avisoVinculo, pacienteId ?? null]
   );
 }
 
 /** Se llama dentro de la transacción que crea un nuevo turno. */
-async function encolarConfirmacion(c, { turnoId, dni, avisoVinculo, autenticado }) {
+async function encolarConfirmacion(c, { turnoId, pacienteId, avisoVinculo, autenticado }) {
   const correo = correoConfigurado();
   const push = pushConfigurado();
   if (!correo && !push) return;
@@ -44,19 +44,19 @@ async function encolarConfirmacion(c, { turnoId, dni, avisoVinculo, autenticado 
       `INSERT INTO aviso_entregas (evento, canal, email)
          SELECT ?, 'correo', TRIM(email) FROM pacientes
           WHERE id_paciente = ? AND NULLIF(TRIM(email), '') IS NOT NULL`,
-      [clave, dni]
+      [clave, pacienteId]
     );
   }
-  if (push) await encolarPush(c, clave, autenticado ? dni : null, avisoVinculo);
+  if (push) await encolarPush(c, clave, autenticado ? pacienteId : null, avisoVinculo);
 }
 
 /** Se llama después de revertir el turno que falló en la sincronización. */
-async function encolarConflicto({ dni, avisoVinculo, operacionId }) {
+async function encolarConflicto({ pacienteId, avisoVinculo, operacionId }) {
   if (!pushConfigurado() || !avisoVinculo) return;
-  const origen = dni ? `paciente:${dni}` : `invitado:${avisoVinculo}`;
+  const origen = pacienteId ? `paciente:${pacienteId}` : `invitado:${avisoVinculo}`;
   const clave = huella(`conflicto:${origen}:${operacionId}`);
   await tx(async (c) => {
-    if (await insertarEvento(c, clave, 'conflicto')) await encolarPush(c, clave, dni, avisoVinculo);
+    if (await insertarEvento(c, clave, 'conflicto')) await encolarPush(c, clave, pacienteId, avisoVinculo);
   });
 }
 

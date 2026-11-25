@@ -4,7 +4,7 @@ const { createHash } = require('node:crypto');
 const { tx, esDuplicado } = require('../db');
 const cfg = require('../config');
 const { E } = require('../errors');
-const { autenticar, autenticarOpcional, exigirDueno } = require('../auth');
+const { autenticar, autenticarOpcional } = require('../auth');
 const { guardarFicha } = require('../pacientesDb');
 const { encolarConfirmacion, encolarConflicto, registrarFalloAviso } = require('../avisos/cola');
 const { ahoraEn } = require('../pure/fechas');
@@ -30,7 +30,7 @@ function hashDe(token) {
 
 function usuarioDeReserva(user) {
   if (!user) return null;
-  if (user.rol !== 'paciente' || !user.dni) throw E.prohibido('Solo los pacientes pueden pedir turnos');
+  if (user.rol !== 'paciente' || !user.pacienteId) throw E.prohibido('Solo los pacientes pueden pedir turnos');
   return user.id;
 }
 
@@ -39,9 +39,9 @@ function vinculoDeOrigen(req) {
   return typeof vinculo === 'string' && /^[a-f0-9]{32}$/.test(vinculo) ? vinculo : null;
 }
 
-async function avisarConflicto(e, { dni, avisoVinculo, operacionId }) {
+async function avisarConflicto(e, { pacienteId, avisoVinculo, operacionId }) {
   if (e.code === 'HORARIO_NO_DISPONIBLE' && avisoVinculo && operacionId) {
-    await encolarConflicto({ dni, avisoVinculo, operacionId }).catch(registrarFalloAviso);
+    await encolarConflicto({ pacienteId, avisoVinculo, operacionId }).catch(registrarFalloAviso);
   }
 }
 
@@ -124,7 +124,7 @@ r.post('/reservas', autenticarOpcional, async (req, res) => {
     });
     res.status(repetida ? 200 : 201).json({ venceEn });
   } catch (e) {
-    await avisarConflicto(e, { dni: req.user?.dni, avisoVinculo: vinculoDeOrigen(req), operacionId: token });
+    await avisarConflicto(e, { pacienteId: req.user?.pacienteId, avisoVinculo: vinculoDeOrigen(req), operacionId: token });
     throw e;
   }
 });
@@ -159,16 +159,16 @@ r.post('/', autenticarOpcional, async (req, res) => {
   try {
     const { id, repetido } = await tx(async (c) => {
       await bloquearEspecialista(c, especialistaId);
-      let pacienteExistente = false;
+      let pacienteId = req.user?.pacienteId;
       if (!req.user) {
-        const [p] = await c.query('SELECT usuarioID FROM pacientes WHERE id_paciente = ?', [dni]);
-        pacienteExistente = Boolean(p[0]);
-        if (pacienteExistente) await verificarFichaInvitada(c, dni);
+        const [p] = await c.query('SELECT id_paciente, usuarioID FROM pacientes WHERE dni = ?', [dni]);
+        pacienteId = p[0]?.id_paciente;
+        if (pacienteId) await verificarFichaInvitada(c, dni);
       }
 
       const activo = await leerTurnoActivo(c, slot);
       if (activo) {
-        if (String(activo.paciente) === dni && (!tokenHash || activo.reserva_token_hash?.equals(tokenHash))) {
+        if (activo.paciente === pacienteId && (!tokenHash || activo.reserva_token_hash?.equals(tokenHash))) {
           return { id: activo.id_turno, repetido: true };
         }
         throw E.horarioNoDisponible();
@@ -181,9 +181,9 @@ r.post('/', autenticarOpcional, async (req, res) => {
       if (!propia && (reserva?.vigente || (tokenHash && !reservaTentativa))) throw E.horarioNoDisponible();
       if (datos) {
         if (!datos.email) throw E.validacion('El correo electrónico es obligatorio para confirmar');
-        await guardarFicha(c, datos, null);
+        pacienteId = await guardarFicha(c, datos, null);
         // Para un DNI nuevo, el upsert obtiene el bloqueo sin bloquear un hueco del índice.
-        if (!req.user && !pacienteExistente) await verificarFichaInvitada(c, dni);
+        if (!req.user) await verificarFichaInvitada(c, dni);
       }
       if (propia) {
         const [resultado] = await borrarReserva(c, slot, tokenHash, usuarioId, true);
@@ -195,25 +195,25 @@ r.post('/', autenticarOpcional, async (req, res) => {
         const [ins] = await c.query(
           `INSERT INTO turnos (fecha, hora, paciente, especialista, reserva_token_hash)
            VALUES (?, ?, ?, ?, ?)`,
-          [fecha, hora, dni, especialistaId, tokenHash]
+          [fecha, hora, pacienteId, especialistaId, tokenHash]
         );
         id = ins.insertId;
       } catch (e) {
         if (!esDuplicado(e)) throw e;
         throw E.horarioNoDisponible();
       }
-      await encolarConfirmacion(c, { turnoId: id, dni, avisoVinculo, autenticado: Boolean(req.user) });
+      await encolarConfirmacion(c, { turnoId: id, pacienteId, avisoVinculo, autenticado: Boolean(req.user) });
       return { id, repetido: false };
     });
     res.status(repetido ? 200 : 201).json({ id });
   } catch (e) {
-    await avisarConflicto(e, { dni: req.user?.dni, avisoVinculo, operacionId: operacionId ?? req.body?.reservaToken });
+    await avisarConflicto(e, { pacienteId: req.user?.pacienteId, avisoVinculo, operacionId: operacionId ?? req.body?.reservaToken });
     throw e;
   }
 });
 
 async function verificarFichaInvitada(c, dni) {
-  const [p] = await c.query('SELECT usuarioID FROM pacientes WHERE id_paciente = ? FOR UPDATE', [dni]);
+  const [p] = await c.query('SELECT id_paciente, usuarioID FROM pacientes WHERE dni = ? FOR UPDATE', [dni]);
   if (p[0]?.usuarioID) throw E.requiereLogin();
 }
 
@@ -224,10 +224,7 @@ r.patch('/:id/cancelar', autenticar, async (req, res) => {
     const [rows] = await c.query('SELECT paciente, estado FROM turnos WHERE id_turno = ? FOR UPDATE', [id]);
     const t = rows[0];
     // Si el turno es de otro paciente respondemos "no existe" (no revelamos qué ids existen).
-    if (!t) throw E.noEncontrado('El turno no existe');
-    try {
-      exigirDueno(req.user, String(t.paciente));
-    } catch {
+    if (!t || req.user.rol !== 'paciente' || t.paciente !== req.user.pacienteId) {
       throw E.noEncontrado('El turno no existe');
     }
     if (t.estado === 'cancelado') return; // cancelar dos veces no es error

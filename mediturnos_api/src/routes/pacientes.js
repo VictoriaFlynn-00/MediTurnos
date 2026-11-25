@@ -12,7 +12,7 @@ const r = Router();
 // GET /api/pacientes/:dni  -> ficha (para autocompletar el registro)
 r.get('/:dni', busqueda, autenticarOpcional, async (req, res) => {
   const dni = V.dni(req.params.dni);
-  const [rows] = await pool.query('SELECT * FROM pacientes WHERE id_paciente = ?', [dni]);
+  const [rows] = await pool.query('SELECT * FROM pacientes WHERE dni = ?', [dni]);
   const p = rows[0];
   if (!p) throw E.noEncontrado('No hay un paciente con ese DNI');
   // De quien ya tiene cuenta no se exponen datos personales a desconocidos.
@@ -31,9 +31,9 @@ r.put('/:dni', autenticar, async (req, res) => {
             obraSocial = ?, email = ?, plan = ?, nroAfiliado = ?
       WHERE id_paciente = ?`,
     [d.nombre, d.apellido, d.fechaNacimiento, d.domicilio, d.telefono, d.obraSocial,
-     d.email, d.plan, d.nroAfiliado, dni]
+     d.email, d.plan, d.nroAfiliado, req.user.pacienteId]
   );
-  const [rows] = await pool.query('SELECT * FROM pacientes WHERE id_paciente = ?', [dni]);
+  const [rows] = await pool.query('SELECT * FROM pacientes WHERE dni = ?', [dni]);
   if (!rows[0]) throw E.noEncontrado('Paciente inexistente');
   res.json(pacienteAJson(rows[0]));
 });
@@ -51,7 +51,7 @@ r.get('/:dni/turnos', autenticar, async (req, res) => {
        JOIN especialidades s ON s.id_especialidad = e.especialidad
       WHERE t.paciente = ?
       ORDER BY t.fecha DESC, t.hora DESC`,
-    [dni]
+    [req.user.pacienteId]
   );
   res.json(rows.map(turnoAJson));
 });

@@ -10,7 +10,7 @@ process.env.DB_HOST = 'h';
 process.env.DB_USER = 'u';
 process.env.DB_NAME = 'd';
 
-const usuario = { id: 1, nombre: 'usuario_demo', dni: 34123456, email: 'titular@example.test' };
+const usuario = { id: 1, nombre: 'usuario_demo', dni: '34123456', email: 'titular@example.test' };
 const hash = (s) => createHash('sha256').update(s).digest();
 const correos = [];
 const rutas = new Map();
@@ -22,8 +22,8 @@ let tarea;
 const db = {
   pool: {
     async query(sql, [param]) {
-      if (sql.includes('SELECT s.version FROM usuarios')) {
-        return [param === usuario.id ? [{ version }] : []];
+      if (sql.includes('SELECT s.version, f.id_paciente')) {
+        return [param === usuario.id ? [{ version, dni: usuario.dni, id_paciente: 17 }] : []];
       }
       if (sql.includes('u.contrasena_hash')) {
         return [param === usuario.nombre ? [{
@@ -32,7 +32,7 @@ const db = {
       }
       if (sql.startsWith('SELECT * FROM pacientes')) {
         assert.equal(param, usuario.id);
-        return [[{ id_paciente: usuario.dni, email: usuario.email, usuarioID: usuario.id }]];
+        return [[{ id_paciente: 17, dni: usuario.dni, email: usuario.email, usuarioID: usuario.id }]];
       }
       if (sql.includes('FROM usuarios WHERE usuario')) {
         return [param.toLowerCase() === usuario.nombre ? [{ id_usuario: usuario.id }] : []];
@@ -141,6 +141,8 @@ test('recupera por correo registrado y canjea cada código una sola vez', async 
   }
   await validarSesion(jwtAnterior);
   const inicio = await llamar('/login', { usuario: usuario.nombre, password: 'clave-anterior' });
+  assert.equal(inicio.cuerpo.paciente.id, 17);
+  assert.equal(inicio.cuerpo.paciente.dni, usuario.dni);
   await validarSesion(inicio.cuerpo.token);
 
   const desconocido = await llamar('/recuperacion', { usuario: 'cuenta_desconocida' });

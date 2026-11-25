@@ -16,23 +16,26 @@ const avisos = { confirmaciones: [], conflictos: [] };
 const FECHA = '2030-01-07'; // lunes
 const conexion = {
   async query(sql, p = []) {
-    if (/SELECT s.version FROM usuarios/.test(sql)) return [[{ version: null }]];
+    if (/SELECT s.version, f.id_paciente/.test(sql)) {
+      const entry = [...estado.pacientes].find(([, ficha]) => ficha.usuarioID === p[0]);
+      return [entry ? [{ version: null, dni: entry[0], id_paciente: entry[1].id_paciente }] : []];
+    }
     if (/FROM especialistas WHERE id_especialista/.test(sql)) return [[{ 1: 1 }]];
     if (/FROM horarios_atencion/.test(sql)) return [[{ dia_semana: 1, hora: '09:00' }]];
-    if (/SELECT usuarioID FROM pacientes/.test(sql)) {
+    if (/SELECT id_paciente, usuarioID FROM pacientes/.test(sql)) {
       const pac = estado.pacientes.get(String(p[0]));
-      return [pac ? [{ usuarioID: pac.usuarioID }] : []];
+      return [pac ? [pac] : []];
     }
     if (/INSERT INTO pacientes/.test(sql)) {
-      if (!estado.pacientes.has(String(p[0]))) estado.pacientes.set(String(p[0]), { usuarioID: null });
-      return [{}];
+      if (!estado.pacientes.has(String(p[0]))) estado.pacientes.set(String(p[0]), { id_paciente: estado.pacientes.size + 10, usuarioID: null });
+      return [{ insertId: estado.pacientes.get(String(p[0])).id_paciente }];
     }
     if (/INSERT INTO turnos/.test(sql)) {
       const [fecha, hora, paciente, esp, tokenHash] = p;
       if (estado.turnos.some((t) => t.estado === 'activo' && t.fecha === fecha && t.hora === hora && t.esp === esp)) {
         throw Object.assign(new Error('dup'), { code: 'ER_DUP_ENTRY' });
       }
-      const t = { id: estado.sig++, fecha, hora, paciente: String(paciente), esp, estado: 'activo', tokenHash };
+      const t = { id: estado.sig++, fecha, hora, paciente, esp, estado: 'activo', tokenHash };
       estado.turnos.push(t);
       return [{ insertId: t.id }];
     }
@@ -112,7 +115,12 @@ require('../src/routes/turnos');
 Module._load = original;
 
 // ---- Ayudas ----
-const carnet = (dni) => 'Bearer T.' + Buffer.from(JSON.stringify({ rol: 'paciente', dni, sub: '1' })).toString('base64');
+function carnet(dni) {
+  const ficha = estado.pacientes.get(dni) ?? { id_paciente: estado.pacientes.size + 10 };
+  ficha.usuarioID ??= ficha.id_paciente + 100;
+  estado.pacientes.set(dni, ficha);
+  return 'Bearer T.' + Buffer.from(JSON.stringify({ rol: 'paciente', dni, sub: String(ficha.usuarioID) })).toString('base64');
+}
 async function llamar(clave, { body, params, headers = {} } = {}) {
   const req = { body, params: params ?? {}, query: {}, headers };
   const res = { codigo: 200, json(x) { this.cuerpo = x; return this; }, status(c) { this.codigo = c; return this; }, end() {} };
@@ -147,7 +155,7 @@ test('reintento del MISMO paciente devuelve el mismo turno (idempotente)', async
 });
 
 test('invitado con DNI que ya tiene cuenta -> 403 REQUIERE_LOGIN', async () => {
-  estado.pacientes.set('34123456', { usuarioID: 7 });
+  estado.pacientes.set('34123456', { id_paciente: 12, usuarioID: 7 });
   const r = await llamar('POST /', { body: pedido(invitado('34123456')) });
   assert.equal(r.codigo, 403);
   assert.equal(r.code, 'REQUIERE_LOGIN');
@@ -206,7 +214,7 @@ test('una retención aparta el horario y su reintento conserva el vencimiento', 
 test('proteger reservas de sesión y liberar al cancelar o vencer', async () => {
   const a = candidato('2030-01-21', 'c'.repeat(64));
   const b = candidato(a.fecha, 'd'.repeat(64));
-  const sesion = { headers: { authorization: carnet(a.paciente.dni) }, body: a };
+  const sesion = { headers: { authorization: carnet('34123456') }, body: a };
   assert.equal((await llamar('POST /reservas', sesion)).codigo, 201);
   await liberar(a);
   assert.equal((await reservar(b)).codigo, 409);
@@ -237,5 +245,6 @@ test('la misma cuenta conserva el vínculo de la instalación que confirma o enc
   const confirmado = avisos.confirmaciones.at(-1);
   assert.equal(confirmado.autenticado, true);
   assert.equal(confirmado.avisoVinculo, tablet);
-  assert.equal(confirmado.dni, body.paciente.dni);
+  assert.equal(confirmado.pacienteId, estado.pacientes.get(body.paciente.dni).id_paciente);
+  assert.notEqual(confirmado.pacienteId, Number(body.paciente.dni));
 });

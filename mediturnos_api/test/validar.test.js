@@ -8,6 +8,7 @@ const falla = (fn) => assert.throws(fn, (e) => e instanceof ApiError && e.status
 
 test('dni', () => {
   assert.equal(V.dni(' 34123456 '), '34123456');
+  assert.equal(V.dni('01234567'), '1234567');
   falla(() => V.dni('123'));
   falla(() => V.dni('12345678a'));
 });

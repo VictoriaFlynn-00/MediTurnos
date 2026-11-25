@@ -9,7 +9,7 @@ App Flutter ──HTTPS + JWT──▶ esta API ──▶ MySQL
 
 ## Actualizar una instalación de MediTurnos
 
-En una base que ya tiene el esquema de MediTurnos, aplicá una vez las migraciones pendientes de la carpeta sql, en orden: 03_turnos.sql, 04_cuentas.sql, 05_avisos.sql y 06_push_origen.sql. Después desplegá esta API y actualizá Flutter en los dispositivos. El volcado inicial elimina tablas y se usa únicamente al instalar desde cero.
+En una base que ya tiene el esquema de MediTurnos, aplicá una vez las migraciones pendientes de la carpeta sql, en orden: 03_turnos.sql, 04_cuentas.sql, 05_avisos.sql, 06_push_origen.sql y 07_pacientes.sql. Antes de la migración 07, hacé un respaldo y detené las escrituras de la API y del procesador de avisos. La migración asigna un ID autoincremental a cada ficha y conserva el DNI como campo único. Después desplegá esta API y actualizá Flutter en los dispositivos. El volcado inicial elimina tablas y se usa únicamente al instalar desde cero.
 
 La app consulta los horarios con detalle=1, aparta una franja por siete minutos en MySQL y confirma usando el token de esa reserva. La confirmación genera los avisos de correo y push configurados. La recuperación de contraseña usa un código de un solo uso que vence en 20 minutos. Las credenciales de SendGrid y Firebase y los pasos para cada plataforma figuran en [la guía de avisos](../mediturnos_flutter/docs/AVISOS.md).
 
@@ -57,6 +57,7 @@ Necesitás Node 20.6+ y MySQL 8.0.19+.
    mysql -u root -p < mediturnos_api/sql/04_cuentas.sql
    mysql -u root -p < mediturnos_api/sql/05_avisos.sql
    mysql -u root -p < mediturnos_api/sql/06_push_origen.sql
+   mysql -u root -p < mediturnos_api/sql/07_pacientes.sql
    ```
 2. Configurá y arrancá:
    ```bash
@@ -97,7 +98,7 @@ guardalo en `certs/ca.pem` y poné `DB_SSL_CA=./certs/ca.pem`.
 - **Reintentos seguros.** Si la app pidió un turno, el servidor lo guardó pero la respuesta se perdió, la app
   reintenta desde su cola offline. Si el horario ya es de ese mismo paciente, la API devuelve el mismo
   turno (200) en vez de un 409. Sin esto, el turno quedaría "rechazado" en el celular estando reservado.
-- **El DNI sale del carnet**, no de lo que manda la app: nadie puede pedir, ver ni cancelar turnos ajenos.
+- **La ficha se obtiene por el ID de usuario del carnet**, no de lo que manda la app: nadie puede pedir, ver ni cancelar turnos ajenos.
 - **Disponibilidad** = agenda semanal (`horarios_atencion`) − turnos activos − horarios que ya pasaron
   (en la zona `APP_TZ`).
 - Contraseñas con bcrypt. Límite de intentos en login/registro y en la búsqueda por DNI.

@@ -4,9 +4,9 @@ const cfg = require('./config');
 const { pool } = require('./db');
 const { E } = require('./errors');
 
-/** Emite el "carnet" (JWT). Lleva: id de usuario, rol y DNI (si es paciente). */
-function firmar(usuario, dni) {
-  return jwt.sign({ rol: usuario.rol, dni: dni ?? null, v: usuario.version ?? 0 }, cfg.jwtSecret, {
+/** Emite el "carnet" (JWT). Lleva: id de usuario, rol y versión de la sesión. */
+function firmar(usuario) {
+  return jwt.sign({ rol: usuario.rol, v: usuario.version ?? 0 }, cfg.jwtSecret, {
     algorithm: 'HS256',
     subject: String(usuario.id),
     expiresIn: `${cfg.jwtHoras}h`,
@@ -28,14 +28,15 @@ async function leer(req) {
   if (!Number.isSafeInteger(id) || id <= 0) throw E.tokenInvalido();
 
   const [[sesion]] = await pool.query(
-    `SELECT s.version FROM usuarios u
+    `SELECT s.version, f.id_paciente, f.dni FROM usuarios u
+       LEFT JOIN pacientes f ON f.usuarioID = u.id_usuario
        LEFT JOIN versiones_sesion s ON s.usuario_id = u.id_usuario
       WHERE u.id_usuario = ?`,
     [id]
   );
   // Las cuentas y los JWT anteriores a la migración tienen versión inicial 0.
   if (!sesion || (sesion.version ?? 0) !== (p.v ?? 0)) throw E.tokenInvalido();
-  return { id, rol: p.rol, dni: p.dni ?? null };
+  return { id, rol: p.rol, dni: sesion.dni ?? null, pacienteId: sesion.id_paciente ?? null };
 }
 
 /** Exige carnet válido. */
